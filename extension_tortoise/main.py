@@ -1,19 +1,20 @@
 import gradio as gr
 
-from extension_tortoise.gen_tortoise import (
+from .gen_tortoise import (
     generate_tortoise_long,
     get_voice_list,
     TORTOISE_VOICE_DIR_ABS,
 )
-from extension_tortoise.TortoiseParameters import (
+from .TortoiseParameters import (
     TortoiseParameterComponents,
     TortoiseParameters,
 )
-from extension_tortoise.autoregressive_params import autoregressive_params
-from extension_tortoise.diffusion_params import diffusion_params
-from extension_tortoise.presets import presets
-from tts_webui.utils.gr_reload_button import gr_open_button_simple, gr_reload_button
-from extension_tortoise.tortoise_model_settings_ui import tortoise_model_settings_ui
+from .autoregressive_params import autoregressive_params
+from .diffusion_params import diffusion_params
+from .presets import presets
+from gradio_iconbutton import IconButton
+from .tortoise_model_settings_ui import tortoise_model_settings_ui
+from tts_webui.utils.OpenFolderButton import OpenFolderButton
 from tts_webui.utils.randomize_seed import randomize_seed_ui
 from tts_webui.decorators.gradio_dict_decorator import dictionarize
 
@@ -34,10 +35,8 @@ def ui():
                         container=False,
                         allow_custom_value=True,
                     )
-                    gr_open_button_simple(
-                        TORTOISE_VOICE_DIR_ABS, api_name="tortoise_open_voices"
-                    )
-                    gr_reload_button().click(
+                    OpenFolderButton(TORTOISE_VOICE_DIR_ABS, api_name="tortoise_open_voices")
+                    IconButton("refresh").click(
                         fn=lambda: gr.Dropdown(choices=get_voice_list()),
                         outputs=[voice],
                         api_name="tortoise_refresh_voices",
@@ -173,11 +172,10 @@ def ui():
 
 def extension__tts_generation_webui():
     ui()
-    
+
     return {
         "package_name": "extension_tortoise",
         "name": "Tortoise TTS",
-        "version": "0.0.1",
         "requirements": "git+https://github.com/rsxdalv/extension_tortoise@main",
         "description": "Tortoise TTS is a high-quality text-to-speech model with voice cloning capabilities",
         "extension_type": "interface",
@@ -194,7 +192,7 @@ def extension__tts_generation_webui():
 if __name__ == "__main__":
     if "demo" in locals():
         locals()["demo"].close()
-    from tts_webui.css.css import full_css
+    from tts_webui.gradio.css import full_css
 
     with gr.Blocks(css=full_css) as demo:
         with gr.Tab("Tortoise TTS"):

@@ -1,11 +1,12 @@
+import gradio as gr
 from extension_tortoise.gen_tortoise import (
     TORTOISE_LOCAL_MODELS_DIR,
     get_model_list,
     switch_model,
     unload_tortoise_model,
 )
-from tts_webui.utils.gr_reload_button import gr_open_button_simple, gr_reload_button
-import gradio as gr
+from gradio_iconbutton import IconButton
+from tts_webui.utils.OpenFolderButton import OpenFolderButton
 
 
 def tortoise_model_settings_ui_inner():
@@ -16,10 +17,8 @@ def tortoise_model_settings_ui_inner():
             show_label=False,
             container=False,
         )
-        gr_open_button_simple(
-            TORTOISE_LOCAL_MODELS_DIR, api_name="tortoise_open_models"
-        )
-        gr_reload_button().click(
+        OpenFolderButton(TORTOISE_LOCAL_MODELS_DIR, api_name="tortoise_open_models")
+        IconButton("refresh").click(
             fn=lambda: gr.Dropdown(choices=get_model_list()),
             outputs=[model],
             api_name="tortoise_refresh_models",
