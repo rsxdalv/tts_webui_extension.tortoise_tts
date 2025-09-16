@@ -3,12 +3,12 @@ import numpy as np
 import gradio as gr
 from scipy.io.wavfile import write as write_wav
 
-from extension_tortoise.save_json import save_json
+from .save_json import save_json
 from tts_webui.utils.split_text_functions import split_by_lines
 from tts_webui.utils.create_base_filename import create_base_filename
 from tts_webui.utils.date import get_date_string
 from tts_webui.utils.save_waveform_plot import middleware_save_waveform_plot
-from extension_tortoise.TortoiseParameters import TortoiseParameters
+from .TortoiseParameters import TortoiseParameters
 from tts_webui.utils.get_path_from_root import get_path_from_root
 from tts_webui.utils.torch_clear_memory import torch_clear_memory
 
