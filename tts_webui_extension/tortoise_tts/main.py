@@ -174,9 +174,9 @@ def extension__tts_generation_webui():
     ui()
 
     return {
-        "package_name": "extension_tortoise",
+        "package_name": "tts_webui_extension.tortoise_tts",
         "name": "Tortoise TTS",
-        "requirements": "git+https://github.com/rsxdalv/extension_tortoise@main",
+        "requirements": "git+https://github.com/rsxdalv/tts_webui_extension.tortoise_tts@main",
         "description": "Tortoise TTS is a high-quality text-to-speech model with voice cloning capabilities",
         "extension_type": "interface",
         "extension_class": "text-to-speech",
@@ -184,7 +184,7 @@ def extension__tts_generation_webui():
         "extension_author": "rsxdalv",
         "license": "MIT",
         "website": "https://github.com/neonbjb/tortoise-tts",
-        "extension_website": "https://github.com/rsxdalv/extension_tortoise",
+        "extension_website": "https://github.com/rsxdalv/tts_webui_extension.tortoise_tts",
         "extension_platform_version": "0.0.1",
     }
 
