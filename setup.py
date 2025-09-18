@@ -3,7 +3,7 @@ import setuptools
 setuptools.setup(
     name="tts_webui_extension.tortoise_tts",
     packages=setuptools.find_namespace_packages(),
-    version="0.0.2",
+    version="0.0.3",
     author="rsxdalv",
     description="Tortoise TTS is a high-quality text-to-speech model with voice cloning capabilities",
     url="https://github.com/rsxdalv/tts_webui_extension.tortoise",
