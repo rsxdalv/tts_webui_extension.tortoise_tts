@@ -1,6 +1,6 @@
 import gradio as gr
 
-from .gen_tortoise import (
+from .api import (
     generate_tortoise_long,
     get_voice_list,
     TORTOISE_VOICE_DIR_ABS,

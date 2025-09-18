@@ -10,7 +10,7 @@ setuptools.setup(
     project_urls={},
     scripts=[],
     install_requires=[
-        "tortoise-tts @ https://github.com/rsxdalv/tortoise-tts/releases/download/v3.0.1/tortoise_tts-3.0.1-py3-none-any.whl",
+        "tts-webui.tortoise-tts"
     ],
     classifiers=[
         "Programming Language :: Python :: 3",

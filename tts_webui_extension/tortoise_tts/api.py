@@ -268,3 +268,45 @@ def generate_tortoise_long(count: int, params: TortoiseParameters):
 
     # return [None, None, None]
     return {}
+
+def tts(
+    text: str,
+    voice: str = "random",
+    preset: str = "ultra_fast",
+    seed: int | None = None,
+    cvvp_amount: float = 0.0,
+    split_prompt: bool = False,
+    num_autoregressive_samples: int = 16,
+    diffusion_iterations: int = 16,
+    temperature: float = 0.8,
+    length_penalty: float = 1.0,
+    repetition_penalty: float = 2.0,
+    top_p: float = 0.8,
+    max_mel_tokens: int = 500,
+    cond_free: bool = True,
+    cond_free_k: int = 2,
+    diffusion_temperature: float = 1.0,
+    model: str = "Default",
+    name: str = "",
+):
+    result = next(generate_tortoise_long(1, TortoiseParameters(
+        text=text,
+        voice=voice,
+        preset=preset,
+        seed=seed,
+        cvvp_amount=cvvp_amount,
+        split_prompt=split_prompt,
+        num_autoregressive_samples=num_autoregressive_samples,
+        diffusion_iterations=diffusion_iterations,
+        temperature=temperature,
+        length_penalty=length_penalty,
+        repetition_penalty=repetition_penalty,
+        top_p=top_p,
+        max_mel_tokens=max_mel_tokens,
+        cond_free=cond_free,
+        cond_free_k=cond_free_k,
+        diffusion_temperature=diffusion_temperature,
+        model=model,
+        name=name,
+    )))
+    return result
