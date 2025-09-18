@@ -1,4 +1,4 @@
-# Extension adapter for Tortoise TTS
+# Tortoise TTS Extension for [TTS-WebUI](https://github.com/rsxdalv/tts-webui)
 
 License - the source code within this repository is licensed under the MIT license.
 
