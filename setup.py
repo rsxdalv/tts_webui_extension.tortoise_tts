@@ -7,7 +7,7 @@ README = (HERE / "README.md").read_text(encoding="utf-8") if (HERE / "README.md"
 setuptools.setup(
     name="tts_webui_extension.tortoise_tts",
     packages=setuptools.find_namespace_packages(),
-    version="0.0.4",
+    version="0.0.5",
     author="rsxdalv",
     description="Tortoise TTS is a high-quality text-to-speech model with voice cloning capabilities",
     long_description=README,

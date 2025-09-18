@@ -1,5 +1,5 @@
 import gradio as gr
-from .gen_tortoise import (
+from .api import (
     TORTOISE_LOCAL_MODELS_DIR,
     get_model_list,
     switch_model,
