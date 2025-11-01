@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tts_webui_extension.tortoise_tts"
-version = "0.0.5"
+version = "0.1.0"
 description = "Tortoise TTS is a high-quality text-to-speech model with voice cloning capabilities"
 readme = "README.md"
 authors = [

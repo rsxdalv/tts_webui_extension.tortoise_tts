@@ -17,9 +17,8 @@ SAMPLE_RATE = 24_000
 OUTPUT_PATH = "outputs/"
 
 MODEL = None
-TORTOISE_VOICE_DIR = "voices-tortoise"
-
-TORTOISE_VOICE_DIR_ABS = get_path_from_root("voices-tortoise")
+TORTOISE_VOICE_DIR = get_path_from_root("voices", "tortoise")
+TORTOISE_VOICE_DIR_ABS = TORTOISE_VOICE_DIR
 TORTOISE_LOCAL_MODELS_DIR = get_path_from_root("data", "models", "tortoise")
 
 
@@ -75,6 +74,16 @@ def switch_model(
 
 def get_voice_list():
     from tortoise.utils.audio import get_voices
+
+    # migration for legacy users
+    if not os.path.exists(TORTOISE_VOICE_DIR):
+        # mv from voices-tortoise to voices/tortoise
+        old_dir = get_path_from_root("voices-tortoise")
+        if os.path.exists(old_dir):
+            os.makedirs(os.path.dirname(TORTOISE_VOICE_DIR), exist_ok=True)
+            os.rename(old_dir, TORTOISE_VOICE_DIR)
+
+    os.makedirs(TORTOISE_VOICE_DIR, exist_ok=True)
 
     return ["random"] + list(get_voices(extra_voice_dirs=[TORTOISE_VOICE_DIR]))
 
@@ -269,6 +278,7 @@ def generate_tortoise_long(count: int, params: TortoiseParameters):
     # return [None, None, None]
     return {}
 
+
 def tts(
     text: str,
     voice: str = "random",
@@ -289,24 +299,29 @@ def tts(
     model: str = "Default",
     name: str = "",
 ):
-    result = next(generate_tortoise_long(1, TortoiseParameters(
-        text=text,
-        voice=voice,
-        preset=preset,
-        seed=seed,
-        cvvp_amount=cvvp_amount,
-        split_prompt=split_prompt,
-        num_autoregressive_samples=num_autoregressive_samples,
-        diffusion_iterations=diffusion_iterations,
-        temperature=temperature,
-        length_penalty=length_penalty,
-        repetition_penalty=repetition_penalty,
-        top_p=top_p,
-        max_mel_tokens=max_mel_tokens,
-        cond_free=cond_free,
-        cond_free_k=cond_free_k,
-        diffusion_temperature=diffusion_temperature,
-        model=model,
-        name=name,
-    )))
+    result = next(
+        generate_tortoise_long(
+            1,
+            TortoiseParameters(
+                text=text,
+                voice=voice,
+                preset=preset,
+                seed=seed,
+                cvvp_amount=cvvp_amount,
+                split_prompt=split_prompt,
+                num_autoregressive_samples=num_autoregressive_samples,
+                diffusion_iterations=diffusion_iterations,
+                temperature=temperature,
+                length_penalty=length_penalty,
+                repetition_penalty=repetition_penalty,
+                top_p=top_p,
+                max_mel_tokens=max_mel_tokens,
+                cond_free=cond_free,
+                cond_free_k=cond_free_k,
+                diffusion_temperature=diffusion_temperature,
+                model=model,
+                name=name,
+            ),
+        )
+    )
     return result
