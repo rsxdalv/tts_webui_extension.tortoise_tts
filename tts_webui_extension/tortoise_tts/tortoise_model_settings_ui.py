@@ -1,12 +1,13 @@
 import gradio as gr
+from gradio_iconbutton import IconButton
+from tts_webui.utils.OpenFolderButton import OpenFolderButton
+
 from .api import (
     TORTOISE_LOCAL_MODELS_DIR,
     get_model_list,
     switch_model,
     unload_tortoise_model,
 )
-from gradio_iconbutton import IconButton
-from tts_webui.utils.OpenFolderButton import OpenFolderButton
 
 
 def tortoise_model_settings_ui_inner():
