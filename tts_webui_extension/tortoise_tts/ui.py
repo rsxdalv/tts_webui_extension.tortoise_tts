@@ -105,8 +105,6 @@ def ui():
             )
             seed, randomize_seed_callback = randomize_seed_ui()
 
-            split_prompt = gr.Checkbox(label="Split prompt by lines", value=False)
-
             with gr.Accordion(label="Diffusion Parameters", open=False):
                 (
                     diffusion_iterations,
@@ -114,14 +112,6 @@ def ui():
                     cond_free_k,
                     diffusion_temperature,
                 ) = diffusion_params()
-
-            candidates = gr.Slider(
-                value=1,
-                minimum=1,
-                maximum=9,
-                step=1,
-                label="Candidates",
-            )
 
     preset.change(
         fn=lambda x: [
@@ -142,7 +132,6 @@ def ui():
         voice: "voice",
         seed: "seed",
         cvvp_amount: "cvvp_amount",
-        split_prompt: "split_prompt",
         num_autoregressive_samples: "num_autoregressive_samples",
         diffusion_iterations: "diffusion_iterations",
         temperature: "temperature",
@@ -154,7 +143,6 @@ def ui():
         cond_free_k: "cond_free_k",
         diffusion_temperature: "diffusion_temperature",
         model: "model",
-        candidates: "count",
     }
 
     with gr.Column():

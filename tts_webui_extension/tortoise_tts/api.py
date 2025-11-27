@@ -1,3 +1,4 @@
+import functools
 import os
 
 import gradio as gr
@@ -128,83 +129,22 @@ def get_tts(
     return MODEL
 
 
-last_voices = None
-voice_samples = None
-conditioning_latents = None
-
-
-def get_voices_cached(voice):
+@functools.lru_cache(maxsize=1)
+def _get_voice_latents(voice):
     from tortoise.utils.audio import load_voices
-
-    global last_voices, voice_samples, conditioning_latents
-
-    if voice == last_voices:
-        last_voices = voice
-        return voice_samples, conditioning_latents
 
     voices = voice.split("&") if "&" in voice else [voice]
 
     voice_samples, conditioning_latents = load_voices(
         voices, extra_voice_dirs=[TORTOISE_VOICE_DIR]
     )
-    last_voices = voices
     return voice_samples, conditioning_latents
 
 
-def _generate_tortoise_chunk(
-    text: str,
-    candidates: int,
-    **kwargs,
-):
-    voice = kwargs.get("voice", "random")
-    voice_samples, conditioning_latents = get_voices_cached(voice)
-
-    tts_model = get_tts()
-
-    excluded_keys = ["text", "voice", "split_prompt", "seed", "model", "count"]
-    tts_kwargs = {k: v for k, v in kwargs.items() if k not in excluded_keys}
-
-    result, state = tts_model.tts_with_preset(
-        text,
-        return_deterministic_state=True,
-        k=candidates,
-        voice_samples=voice_samples,
-        conditioning_latents=conditioning_latents,
-        **tts_kwargs,
-    )
-
-    gen_list = result if isinstance(result, list) else [result]
-    audio_arrays = [tensor_to_audio_array(x) for x in gen_list]
-
-    return audio_arrays
-
-
-# @decorator_apply_torch_seed_generator
-# @decorator_log_generation_generator
-# @decorator_save_wav_generator
-# @decorator_save_metadata_generator
-# @decorator_add_model_type_generator("tortoise")
-
-
-# @functools.wraps(tts_stream)
-# @decorator_convert_audio_output_generator  # <-- This goes first/top
-@decorator_extension_outer_generator
-@decorator_apply_torch_seed_generator
-@decorator_save_metadata_generator
-@decorator_save_wav_generator_accumulated
-@decorator_add_model_type_generator("tortoise")
-@decorator_add_base_filename_generator_accumulated
-@decorator_add_date_generator
-@decorator_log_generation_generator
-@decorator_extension_inner_generator
-@log_generator_time
 def tts(
     text: str,
-    count: int = 1,
     voice: str = "random",
-    seed: int | None = None,
     cvvp_amount: float = 0.0,
-    split_prompt: bool = False,
     num_autoregressive_samples: int = 16,
     diffusion_iterations: int = 16,
     temperature: float = 0.8,
@@ -218,50 +158,52 @@ def tts(
     model: str = "Default",
     **kwargs,
 ):
-    params = {
-        "count": count,
-        "voice": voice,
-        "seed": seed,
-        "cvvp_amount": float(cvvp_amount),
-        "split_prompt": split_prompt,
-        "num_autoregressive_samples": num_autoregressive_samples,
-        "diffusion_iterations": diffusion_iterations,
-        "temperature": float(temperature),
-        "length_penalty": float(length_penalty),
-        "repetition_penalty": float(repetition_penalty),
-        "top_p": float(top_p),
-        "max_mel_tokens": max_mel_tokens,
-        "cond_free": cond_free,
-        "cond_free_k": cond_free_k,
-        "diffusion_temperature": float(diffusion_temperature),
-        "model": model,
-    }
+    voice_samples, conditioning_latents = _get_voice_latents(voice)
+    tts_model = get_tts()
 
-    prompt_raw = text
-
-    prompts = split_by_lines(prompt_raw) if split_prompt else [prompt_raw]
-    audio_pieces = [[] for _ in range(count)]
+    prompts = split_by_lines(text)
 
     for prompt in prompts:
-        audio_arrays = _generate_tortoise_chunk(text=prompt, candidates=count, **params)
-        for i, audio_array in enumerate(audio_arrays):
-            yield {
-                "audio_out": (SAMPLE_RATE, audio_array),
-                "metadata": {**params, "text": prompt},
-            }
-            audio_pieces[i].append(audio_array)
+        result, _ = tts_model.tts_with_preset(
+            prompt,
+            return_deterministic_state=True,
+            k=1,
+            voice_samples=voice_samples,
+            conditioning_latents=conditioning_latents,
+            cvvp_amount=float(cvvp_amount),
+            num_autoregressive_samples=num_autoregressive_samples,
+            diffusion_iterations=diffusion_iterations,
+            temperature=float(temperature),
+            length_penalty=float(length_penalty),
+            repetition_penalty=float(repetition_penalty),
+            top_p=float(top_p),
+            max_mel_tokens=max_mel_tokens,
+            cond_free=cond_free,
+            cond_free_k=cond_free_k,
+            diffusion_temperature=float(diffusion_temperature),
+        )
 
-    # if there is only one prompt, then we don't need to concatenate
-    if len(prompts) == 1:
-        return
+        gen_list = result if isinstance(result, list) else [result]
+        audio_arrays = [tensor_to_audio_array(x) for x in gen_list]
+        audio_array = audio_arrays[0]
 
-    for i in range(count):
-        full_audio = np.concatenate(audio_pieces[i])
-        yield {
-            "audio_out": (SAMPLE_RATE, full_audio),
-            "metadata": params,
-        }
+        yield {"audio_out": (SAMPLE_RATE, audio_array)}
 
 
 def tensor_to_audio_array(gen):
     return gen.squeeze(0).cpu().t().numpy()
+
+
+@functools.wraps(tts)
+@decorator_extension_outer_generator
+@decorator_apply_torch_seed_generator
+@decorator_save_metadata_generator
+@decorator_save_wav_generator_accumulated
+@decorator_add_model_type_generator("tortoise")
+@decorator_add_base_filename_generator_accumulated
+@decorator_add_date_generator
+@decorator_log_generation_generator
+@decorator_extension_inner_generator
+@log_generator_time
+def tts_decorated(*args, **kwargs):
+    return tts(*args, **kwargs)
