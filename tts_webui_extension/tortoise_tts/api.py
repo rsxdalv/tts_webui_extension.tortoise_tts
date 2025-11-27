@@ -2,31 +2,20 @@ import functools
 import os
 
 import gradio as gr
-import numpy as np
 from tts_webui.decorators import *
-from tts_webui.decorators import (
-    decorator_add_model_type_generator,
-    decorator_apply_torch_seed_generator,
-    decorator_log_generation_generator,
-    decorator_save_metadata_generator,
-)
 from tts_webui.decorators.decorator_save_wav import (
-    decorator_save_wav_generator,
     decorator_save_wav_generator_accumulated,
 )
 from tts_webui.extensions_loader.decorator_extensions import (
-    decorator_extension_inner,
     decorator_extension_inner_generator,
-    decorator_extension_outer,
     decorator_extension_outer_generator,
 )
 from tts_webui.utils.get_path_from_root import get_path_from_root
+from tts_webui.utils.manage_model_state import manage_model_state
 from tts_webui.utils.split_text_functions import split_by_lines
-from tts_webui.utils.torch_clear_memory import torch_clear_memory
 
 SAMPLE_RATE = 24_000
 
-MODEL = None
 TORTOISE_VOICE_DIR = get_path_from_root("voices", "tortoise")
 TORTOISE_VOICE_DIR_ABS = TORTOISE_VOICE_DIR
 TORTOISE_LOCAL_MODELS_DIR = get_path_from_root("data", "models", "tortoise")
@@ -46,58 +35,18 @@ def get_full_model_dir(model_dir: str):
     return os.path.join(TORTOISE_LOCAL_MODELS_DIR, model_dir)
 
 
-def switch_model(
-    model_dir: str,
-    kv_cache=False,
-    use_deepspeed=False,
-    half=False,
-    tokenizer=None,
-    use_basic_cleaners=False,
-):
-    from tortoise.api import MODELS_DIR
-
-    get_tts(
-        models_dir=(
-            MODELS_DIR if model_dir == "Default" else get_full_model_dir(model_dir)
-        ),
-        # models_dir=get_full_model_dir(model_dir),
-        force_reload=True,
-        kv_cache=kv_cache,
-        use_deepspeed=use_deepspeed,
-        half=half,
-        tokenizer_path=tokenizer.name if tokenizer else None,
-        tokenizer_basic=use_basic_cleaners,
-    )
-    return gr.Dropdown()
-
-
 def get_voice_list():
     from tortoise.utils.audio import get_voices
-
-    # migration for legacy users
-    if not os.path.exists(TORTOISE_VOICE_DIR):
-        # mv from voices-tortoise to voices/tortoise
-        old_dir = get_path_from_root("voices-tortoise")
-        if os.path.exists(old_dir):
-            os.makedirs(os.path.dirname(TORTOISE_VOICE_DIR), exist_ok=True)
-            os.rename(old_dir, TORTOISE_VOICE_DIR)
 
     os.makedirs(TORTOISE_VOICE_DIR, exist_ok=True)
 
     return ["random"] + list(get_voices(extra_voice_dirs=[TORTOISE_VOICE_DIR]))
 
 
-def unload_tortoise_model():
-    global MODEL
-    if MODEL is not None:
-        del MODEL
-        torch_clear_memory()
-        MODEL = None
-
-
+@manage_model_state("tortoise")
 def get_tts(
+    model_name,
     models_dir=None,
-    force_reload=False,
     kv_cache=False,
     use_deepspeed=False,
     half=False,
@@ -107,26 +56,15 @@ def get_tts(
 ):
     from tortoise.api import MODELS_DIR, TextToSpeech
 
-    if models_dir is None:
-        models_dir = MODELS_DIR
-    global MODEL
-    if MODEL is None or force_reload:
-        print("Loading tortoise model: ", models_dir)
-        print("Clearing memory...")
-        unload_tortoise_model()
-        print("Memory cleared")
-        print("Loading model...")
-        MODEL = TextToSpeech(
-            models_dir=models_dir,
-            kv_cache=kv_cache,
-            use_deepspeed=use_deepspeed,
-            half=half,
-            device=device,
-            tokenizer_vocab_file=tokenizer_path,
-            tokenizer_basic=tokenizer_basic,
-        )
-        print("Model loaded")
-    return MODEL
+    return TextToSpeech(
+        models_dir=models_dir or MODELS_DIR,
+        kv_cache=kv_cache,
+        use_deepspeed=use_deepspeed,
+        half=half,
+        device=device,
+        tokenizer_vocab_file=tokenizer_path,
+        tokenizer_basic=tokenizer_basic,
+    )
 
 
 @functools.lru_cache(maxsize=1)
@@ -156,14 +94,30 @@ def tts(
     cond_free_k: int = 2,
     diffusion_temperature: float = 1.0,
     model: str = "Default",
+    kv_cache: bool = False,
+    use_deepspeed: bool = False,
+    half: bool = False,
+    tokenizer: str = None,
+    use_basic_cleaners: bool = False,
     **kwargs,
 ):
+    from tortoise.api import MODELS_DIR
+
+    models_dir = MODELS_DIR if model == "Default" else get_full_model_dir(model)
+
+    tts_model = get_tts(
+        model_name=f"{models_dir}_{kv_cache}_{use_deepspeed}_{half}_{tokenizer}_{use_basic_cleaners}",
+        models_dir=models_dir,
+        kv_cache=kv_cache,
+        use_deepspeed=use_deepspeed,
+        half=half,
+        tokenizer_path=tokenizer,
+        tokenizer_basic=use_basic_cleaners,
+    )
+
     voice_samples, conditioning_latents = _get_voice_latents(voice)
-    tts_model = get_tts()
 
-    prompts = split_by_lines(text)
-
-    for prompt in prompts:
+    for prompt in split_by_lines(text):
         result, _ = tts_model.tts_with_preset(
             prompt,
             return_deterministic_state=True,
@@ -184,14 +138,8 @@ def tts(
         )
 
         gen_list = result if isinstance(result, list) else [result]
-        audio_arrays = [tensor_to_audio_array(x) for x in gen_list]
-        audio_array = audio_arrays[0]
 
-        yield {"audio_out": (SAMPLE_RATE, audio_array)}
-
-
-def tensor_to_audio_array(gen):
-    return gen.squeeze(0).cpu().t().numpy()
+        yield {"audio_out": (SAMPLE_RATE, gen_list[0].squeeze(0).cpu().t().numpy())}
 
 
 @functools.wraps(tts)
