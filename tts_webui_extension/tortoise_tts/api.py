@@ -1,18 +1,29 @@
-import json
 import os
 
 import gradio as gr
 import numpy as np
-from scipy.io.wavfile import write as write_wav
-from tts_webui.utils.create_base_filename import create_base_filename
-from tts_webui.utils.date import get_date_string
+from tts_webui.decorators import *
+from tts_webui.decorators import (
+    decorator_add_model_type_generator,
+    decorator_apply_torch_seed_generator,
+    decorator_log_generation_generator,
+    decorator_save_metadata_generator,
+)
+from tts_webui.decorators.decorator_save_wav import (
+    decorator_save_wav_generator,
+    decorator_save_wav_generator_accumulated,
+)
+from tts_webui.extensions_loader.decorator_extensions import (
+    decorator_extension_inner,
+    decorator_extension_inner_generator,
+    decorator_extension_outer,
+    decorator_extension_outer_generator,
+)
 from tts_webui.utils.get_path_from_root import get_path_from_root
-from tts_webui.utils.save_waveform_plot import middleware_save_waveform_plot
 from tts_webui.utils.split_text_functions import split_by_lines
 from tts_webui.utils.torch_clear_memory import torch_clear_memory
 
 SAMPLE_RATE = 24_000
-OUTPUT_PATH = "outputs/"
 
 MODEL = None
 TORTOISE_VOICE_DIR = get_path_from_root("voices", "tortoise")
@@ -48,6 +59,7 @@ def switch_model(
         models_dir=(
             MODELS_DIR if model_dir == "Default" else get_full_model_dir(model_dir)
         ),
+        # models_dir=get_full_model_dir(model_dir),
         force_reload=True,
         kv_cache=kv_cache,
         use_deepspeed=use_deepspeed,
@@ -72,10 +84,6 @@ def get_voice_list():
     os.makedirs(TORTOISE_VOICE_DIR, exist_ok=True)
 
     return ["random"] + list(get_voices(extra_voice_dirs=[TORTOISE_VOICE_DIR]))
-
-
-def save_wav_tortoise(audio_array, filename):
-    write_wav(filename, SAMPLE_RATE, audio_array)
 
 
 def unload_tortoise_model():
@@ -148,8 +156,6 @@ def _generate_tortoise_chunk(
     candidates: int,
     **kwargs,
 ):
-    os.makedirs(OUTPUT_PATH, exist_ok=True)
-
     voice = kwargs.get("voice", "random")
     voice_samples, conditioning_latents = get_voices_cached(voice)
 
@@ -164,21 +170,34 @@ def _generate_tortoise_chunk(
         k=candidates,
         voice_samples=voice_samples,
         conditioning_latents=conditioning_latents,
-        use_deterministic_seed=get_seed(kwargs.get("seed")),
         **tts_kwargs,
     )
 
-    seed, _, _, _ = state
-    kwargs["seed"] = seed
-
     gen_list = result if isinstance(result, list) else [result]
     audio_arrays = [tensor_to_audio_array(x) for x in gen_list]
-    return [
-        _process_gen(candidates, audio_array, id, kwargs)
-        for id, audio_array in enumerate(audio_arrays)
-    ]
+
+    return audio_arrays
 
 
+# @decorator_apply_torch_seed_generator
+# @decorator_log_generation_generator
+# @decorator_save_wav_generator
+# @decorator_save_metadata_generator
+# @decorator_add_model_type_generator("tortoise")
+
+
+# @functools.wraps(tts_stream)
+# @decorator_convert_audio_output_generator  # <-- This goes first/top
+@decorator_extension_outer_generator
+@decorator_apply_torch_seed_generator
+@decorator_save_metadata_generator
+@decorator_save_wav_generator_accumulated
+@decorator_add_model_type_generator("tortoise")
+@decorator_add_base_filename_generator_accumulated
+@decorator_add_date_generator
+@decorator_log_generation_generator
+@decorator_extension_inner_generator
+@log_generator_time
 def tts(
     text: str,
     count: int = 1,
@@ -197,10 +216,26 @@ def tts(
     cond_free_k: int = 2,
     diffusion_temperature: float = 1.0,
     model: str = "Default",
+    **kwargs,
 ):
-    print("Generating tortoise with params:")
-    params = locals()
-    print(params)
+    params = {
+        "count": count,
+        "voice": voice,
+        "seed": seed,
+        "cvvp_amount": float(cvvp_amount),
+        "split_prompt": split_prompt,
+        "num_autoregressive_samples": num_autoregressive_samples,
+        "diffusion_iterations": diffusion_iterations,
+        "temperature": float(temperature),
+        "length_penalty": float(length_penalty),
+        "repetition_penalty": float(repetition_penalty),
+        "top_p": float(top_p),
+        "max_mel_tokens": max_mel_tokens,
+        "cond_free": cond_free,
+        "cond_free_k": cond_free_k,
+        "diffusion_temperature": float(diffusion_temperature),
+        "model": model,
+    }
 
     prompt_raw = text
 
@@ -208,77 +243,25 @@ def tts(
     audio_pieces = [[] for _ in range(count)]
 
     for prompt in prompts:
-        datas = _generate_tortoise_chunk(text=prompt, candidates=count, **params)
-        for data in datas:
-            yield data
-
-        for i in range(count):
-            audio_array = datas[i]["audio_out"][1]
+        audio_arrays = _generate_tortoise_chunk(text=prompt, candidates=count, **params)
+        for i, audio_array in enumerate(audio_arrays):
+            yield {
+                "audio_out": (SAMPLE_RATE, audio_array),
+                "metadata": {**params, "text": prompt},
+            }
             audio_pieces[i].append(audio_array)
 
     # if there is only one prompt, then we don't need to concatenate
     if len(prompts) == 1:
-        return {}
+        return
 
     for i in range(count):
-        res = _process_gen(
-            count,
-            np.concatenate(audio_pieces[i]),
-            id=f"_long_{str(i)}",
-            params_dict=params,
-        )
-        yield res
-
-    return {}
-
-
-def get_seed(seed):
-    return seed if seed != -1 else None
-
-
-def _process_gen(candidates, audio_array, id, params_dict):
-    model = "tortoise"
-    date = get_date_string()
-
-    name = params_dict.get("voice", "random")
-    filename, filename_png, filename_json = get_filenames(
-        create_base_filename_tortoise(name, id, model, date)
-    )
-    save_wav_tortoise(audio_array, filename)
-    middleware_save_waveform_plot(audio_array, filename_png)
-
-    metadata = {
-        "_version": "0.0.1",
-        "_type": model,
-        "date": date,
-        "candidates": candidates,
-        "index": id if isinstance(id, int) else 0,
-        **params_dict,
-        "seed": str(params_dict.get("seed")),
-    }
-
-    with open(filename_json, "w") as f:
-        json.dump(metadata, f)
-
-    folder_root = os.path.dirname(filename)
-
-    return {
-        "audio_out": (SAMPLE_RATE, audio_array),
-        "folder_root": folder_root,
-        "metadata": gr.JSON(value=metadata),
-    }
-
-
-def create_base_filename_tortoise(name, j, model, date):
-    return f"{create_base_filename(f'{name}__n{j}', OUTPUT_PATH, model, date)}"
+        full_audio = np.concatenate(audio_pieces[i])
+        yield {
+            "audio_out": (SAMPLE_RATE, full_audio),
+            "metadata": params,
+        }
 
 
 def tensor_to_audio_array(gen):
     return gen.squeeze(0).cpu().t().numpy()
-
-
-def get_filenames(base_filename):
-    filename = f"{base_filename}.wav"
-    filename_png = f"{base_filename}.png"
-    filename_json = f"{base_filename}.json"
-    return filename, filename_png, filename_json

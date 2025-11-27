@@ -162,8 +162,7 @@ def ui():
         folder_root = gr.Textbox(visible=False)
         metadata = gr.JSON(visible=False)
         with gr.Row():
-            from tts_webui.history_tab.save_to_favorites import \
-                save_to_favorites
+            from tts_webui.history_tab.save_to_favorites import save_to_favorites
 
             gr.Button("Save to favorites").click(
                 fn=save_to_favorites,
