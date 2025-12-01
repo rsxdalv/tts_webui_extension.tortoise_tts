@@ -2,7 +2,9 @@ import functools
 import os
 
 import gradio as gr
+import numpy as np
 from tts_webui.decorators import *
+from tts_webui.decorators.decorator_interrupt import interruptible
 from tts_webui.decorators.decorator_save_wav import (
     decorator_save_wav_generator_accumulated,
 )
@@ -53,9 +55,12 @@ def get_tts(
     device=None,
     tokenizer_path=None,
     tokenizer_basic=False,
+    progress=gr.Progress(),
 ):
+    progress(0.0, desc="Importing library...")
     from tortoise.api import MODELS_DIR, TextToSpeech
 
+    progress(0.1, desc="Initializing TextToSpeech...")
     return TextToSpeech(
         models_dir=models_dir or MODELS_DIR,
         kv_cache=kv_cache,
@@ -79,9 +84,11 @@ def _get_voice_latents(voice):
     return voice_samples, conditioning_latents
 
 
-def tts(
+@interruptible("tortoise-tts")
+def tts_stream(
     text: str,
     voice: str = "random",
+    seed: int | None = None,  # for signature compatibility
     cvvp_amount: float = 0.0,
     num_autoregressive_samples: int = 16,
     diffusion_iterations: int = 16,
@@ -93,31 +100,39 @@ def tts(
     cond_free: bool = True,
     cond_free_k: int = 2,
     diffusion_temperature: float = 1.0,
+    # model params
     model: str = "Default",
     kv_cache: bool = False,
     use_deepspeed: bool = False,
     half: bool = False,
     tokenizer: str = None,
     use_basic_cleaners: bool = False,
+    progress=gr.Progress(),
     **kwargs,
 ):
     from tortoise.api import MODELS_DIR
+    from tortoise.utils.text import split_and_recombine_text
 
     models_dir = MODELS_DIR if model == "Default" else get_full_model_dir(model)
 
+    progress(0.0, desc="Loading TTS model...")
     tts_model = get_tts(
-        model_name=f"{models_dir}_{kv_cache}_{use_deepspeed}_{half}_{tokenizer}_{use_basic_cleaners}",
+        model_name=f"Tortoise '{model}' {'with' if kv_cache else 'without'} KV Cache {'with' if use_deepspeed else 'without'} Deepspeed {'half' if half else 'full'} {'basic' if use_basic_cleaners else 'advanced'} tokenizer",
         models_dir=models_dir,
         kv_cache=kv_cache,
         use_deepspeed=use_deepspeed,
         half=half,
         tokenizer_path=tokenizer,
         tokenizer_basic=use_basic_cleaners,
+        progress=progress,
     )
 
+    progress(0.2, desc="Loading voice latents...")
     voice_samples, conditioning_latents = _get_voice_latents(voice)
 
-    for prompt in split_by_lines(text):
+    progress(0.3, desc="Generating audio...")
+    for prompt in split_and_recombine_text(text):
+        progress(0.5, desc=f"Generating audio for chunk: {prompt}")
         result, _ = tts_model.tts_with_preset(
             prompt,
             return_deterministic_state=True,
@@ -142,7 +157,22 @@ def tts(
         yield {"audio_out": (SAMPLE_RATE, gen_list[0].squeeze(0).cpu().t().numpy())}
 
 
-@functools.wraps(tts)
+@functools.wraps(tts_stream)
+def tts(*args, **kwargs):
+    try:
+        wavs = list(tts_stream(*args, **kwargs))
+        if not wavs:
+            raise gr.Error("No audio generated")
+        full_wav = np.concatenate([x["audio_out"][1] for x in wavs], axis=0)
+        return {"audio_out": (wavs[0]["audio_out"][0], full_wav)}
+    except Exception as e:
+        import traceback
+
+        print(traceback.format_exc())
+        raise gr.Error(f"Error: {e}")
+
+
+@functools.wraps(tts_stream)
 @decorator_extension_outer_generator
 @decorator_apply_torch_seed_generator
 @decorator_save_metadata_generator
@@ -153,5 +183,5 @@ def tts(
 @decorator_log_generation_generator
 @decorator_extension_inner_generator
 @log_generator_time
-def tts_decorated(*args, **kwargs):
-    return tts(*args, **kwargs)
+def tts_decorated_stream(*args, **kwargs):
+    yield from tts_stream(*args, **kwargs)
